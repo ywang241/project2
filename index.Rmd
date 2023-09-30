@@ -1,0 +1,141 @@
+---
+title: "index"
+author: "Yan Wang"
+date: "2023-09-20"
+output: html_document
+---
+
+## Part1: Fun with functions
+### 1A: Exponentional transformation
+```{r, echo = TRUE}
+Exp <- function(x, k) {
+  outcome <- 1
+  for (i in 1:k) {
+  outcome <- outcome + x^i/factorial(i)
+  }
+  return(outcome)
+}
+## examples:
+Exp(3, 5)
+Exp(6, 11)
+```
+
+### 1B: Sample mean and sample standard deviation
+```{r, echo=TRUE}
+sample_mean <- function(x) {
+  n <- length(x)
+  return(sum(x)/n)
+}
+
+sample_sd <- function(x) {
+  n <- length(x)
+  m <- sample_mean(x)
+  variance <- sum((x - m)^2)/(n - 1)
+  return(sqrt(variance))
+}
+## examples:
+x <- rnorm(11, mean = 3, sd = 2)
+sample_mean(x)
+sample_sd(x)
+```
+
+### Part1C: Confidence Intervals
+```{r, echo = TRUE}
+calculate_CI <- function(x, conf) {
+  n <- length(x)
+  m <- sample_mean(x)
+  se <- sample_sd(x) / sqrt(n)
+  alpha <- 1 - conf
+  degrees_freedom <- n - 1
+  t_score <- qt(p = alpha / 2, df = degrees_freedom, lower.tail = FALSE)
+  lower_bound <- m - t_score * se
+  upper_bound <- m + t_score * se
+  ci <- c (lower_bound, upper_bound)
+  return(ci)
+}
+## examples:
+data <- 1:1000
+x <- sample(data, 16)
+calculate_CI(x, 0.95)
+calculate_CI(x, 0.99)
+
+```
+
+
+## Part2: Wrangling data
+```{r, echo = FALSE}
+tuesdata <- tidytuesdayR::tt_load("2020-01-07")
+rainfall <- tuesdata$rainfall
+temperature <- tuesdata$temperature
+```
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+glimpse(rainfall)
+glimpse(temperature)
+rainfall1 <- drop_na(rainfall)
+rainfall2 <- mutate(rainfall1, date = as.Date(ymd(paste(rainfall1$year, rainfall1$month, rainfall1$day, sep = "-"))))
+rainfall3 <- select(rainfall2, -month, -day)
+rainfall4 <- mutate(rainfall3, city_name = str_to_upper(city_name))
+df <- inner_join(x = rainfall4, y = temperature, by = c("city_name", "date"))
+print(df)
+```
+
+## Part3: Data visualization
+### Part 3A: Plotting temperature data over time
+```{r, echo = TRUE}
+library(ggplot2)
+library(remotes)
+df1 <- filter(df, year >= 2014)
+remotes::install_github("MatthewBJane/theme_park")
+ggplot(df1, aes(x = date, y = temperature, color = temp_type)) + geom_point(size = 0.5) + geom_line() + labs(title = "Max/Min Temperature Over Time (2014 and later)", subtitle = "For different cities, the tendency of temperature changing over time seems consistent, showing a wave-like change.", caption = "By Yan Wang", x = "Date", y = "Temperature/°C", color = "Temperature type") + facet_wrap(~city_name) + theme_classic() + theme(plot.background = element_rect(fill = "#FCABCC"), plot.title = element_text(size = 16, face = "bold"), plot.subtitle = element_text(size = 11, face = "italic"), plot.caption = element_text(size = 16, face = "bold"), legend.position = "right", legend.text = element_text(size = 11), legend.title = element_text(size = 13)) + ThemePark::theme_avatar()
+
+```
+
+### Part 3B: Plotting rainfall over time
+
+#### Answer: Considering that not all combinations of city_name and year have measurements, I use *if-else* control structure: when there are valid values in the combination of city_name and year, then to plot the histogram, otherwise, stop the next operation and report an "Error: There is no data about the city in this year!". To finish this idea, I use *!any()* function to help me check out whether there is valid values after inputting "city" and "year". Also, I use *&* to make sure that both conditions are "TRUE" at the same time. About the histogram, I customize it by adding color to bars, adding title, subtitle, caption, x-label, and y-labe, etc. I also use the barbie theme to make it shinny. Specifically, in order to show the special input "city_name" and "year" in subtitle, I also use the *paste()* function and *deparse(substitute())* function.
+```{r}
+newdf <- data.frame(df)
+distribution_plot <- function(city, years) {
+  if (!any(newdf$city_name == city & newdf$year == years)) {
+  stop("Error: There is no data about the city in this year!")  
+  } else {
+  new <- filter(newdf, city_name == city, year == years)
+  ggplot(new, aes(log(rainfall))) + geom_histogram(binwidth = 0.2, fill = "#87CEEB", color = "white") + labs(title = "The distribution of rainfall", subtitle = paste("For", deparse(substitute(city_name)), "in", deparse(substitute(year))), caption = "By Yan Wang", x = "Log(rainfall)", y = "Frequency") + theme_light() + theme(plot.title = element_text(size = 16, face = "bold"), plot.subtitle = element_text(size = 14, face = "italic"), plot.caption = element_text(size = 16, face = "bold") )+ ThemePark::theme_barbie()
+ } 
+}
+
+### for example
+distribution_plot("PERTH", 1984)
+```
+
+## Part4: Apply functions and plot
+### Part4A
+```{r, echo = TRUE}
+rain_df <- data.frame()
+cities <- c("BRISBANE", "CANBERRA", "MELBOURNE", "PERTH", "SYDNEY")
+years <- c(2014, 2015, 2016, 2017, 2018, 2019)
+for (city_name1 in cities) {
+   for (year1 in years) {
+   df3 <- filter(df1, city_name == city_name1, year == year1)
+   x <- df3$rainfall
+   m <- sample_mean(x)
+   s <- sample_sd(x)
+   ci <- calculate_CI(x, 0.95) 
+   result <- data.frame(City = city_name1, Year = year1, Mean = m, SD = s, lower_bound = ci[1], upper_bound = ci[2])
+   rain_df <- rbind(rain_df, result)
+   }
+}
+print(rain_df)
+```
+### Part4B
+```{r}
+ggplot(rain_df, aes(x = Year, y = Mean, color = City)) + geom_point() + geom_line()+ geom_errorbar(aes(ymin = lower_bound, ymax = upper_bound), width = 1, size = 0.2, color = "black", linetype = "dashed") + labs(title = "Mean Rainfall over Years", x = "Years", y = "Mean rainfall(95%CI)", subtitle = "Different cities showing different rainfall tendency over years", caption = "By Yan Wang") + facet_wrap(~City) + theme_classic() + theme(plot.title = element_text(size = 16, face = "bold"), plot.subtitle = element_text(size = 14, face = "italic"), plot.caption = element_text(size = 16, face = "bold") ) + xlim(2013, 2020) + ylim(1, 9) + scale_y_continuous(breaks = seq(1, 9, 0.5), labels = seq(1, 9, 0.5))
+
+```
+
+
+
